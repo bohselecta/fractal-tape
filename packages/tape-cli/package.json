@@ -1,0 +1,23 @@
+{
+  "name": "@fractaltape/tape-cli",
+  "version": "0.2.0",
+  "type": "module",
+  "bin": {
+    "tape": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "ingest": "node dist/cli.js ingest",
+    "query": "node dist/cli.js query",
+    "export": "node dist/cli.js export",
+    "glyph-train": "node dist/cli.js glyph-train",
+    "bitmap": "node dist/cli.js bitmap"
+  },
+  "dependencies": {
+    "@fractaltape/tape-core": "0.1.0",
+    "glob": "^11.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4"
+  }
+}

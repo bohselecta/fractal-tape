@@ -1,0 +1,21 @@
+{
+  "name": "fractal-tape",
+  "private": true,
+  "version": "0.2.0",
+  "type": "module",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "npm -w packages/tape-core run build && npm -w packages/tape-cli run build && npm -w packages/tape-web run build",
+    "dev:web": "npm -w packages/tape-web run dev",
+    "test": "npm -w packages/tape-cli run ingest -- ../../docs && npm -w packages/tape-cli run query -- \"test query\" && npm -w packages/tape-cli run export -- ../../packages/tape-web/public/export.json",
+    "test:full": "npm run test && npm -w packages/tape-cli run glyph-train -- ../../docs --max-glyphs 5 && npm -w packages/tape-cli run bitmap -- --build --stats"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13"
+  },
+  "dependencies": {
+    "roaring": "^2.4.0"
+  }
+}

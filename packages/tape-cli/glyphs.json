@@ -1,0 +1,43 @@
+{
+  "generatedAt": "2025-09-04T02:09:38.211Z",
+  "source": [
+    "../../docs"
+  ],
+  "stats": {
+    "documents": 1,
+    "totalWords": 45,
+    "uniquePhrases": 4,
+    "generatedGlyphs": 4
+  },
+  "glyphs": [
+    {
+      "phrase": [
+        "and",
+        "then"
+      ],
+      "glyph": "AT"
+    },
+    {
+      "phrase": [
+        "i'm",
+        "going",
+        "to"
+      ],
+      "glyph": "IGT"
+    },
+    {
+      "phrase": [
+        "i'm",
+        "going"
+      ],
+      "glyph": "IG"
+    },
+    {
+      "phrase": [
+        "going",
+        "to"
+      ],
+      "glyph": "GT"
+    }
+  ]
+}

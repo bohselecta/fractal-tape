@@ -1,0 +1,163 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+  release:
+    types: [published]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        node-version: [18, 20]
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Build packages
+      run: npm run build
+      
+    - name: Test CLI ingest
+      run: |
+        npm -w packages/tape-cli run ingest -- ./docs
+        test -f tape.db
+        
+    - name: Test CLI query
+      run: |
+        npm -w packages/tape-cli run query -- "write"
+        
+    - name: Test CLI export
+      run: |
+        mkdir -p ./packages/tape-web/public
+        npm -w packages/tape-cli run export -- ./packages/tape-web/public/export.json
+        test -f ./packages/tape-web/public/export.json
+        
+    - name: Test CLI glyph training
+      run: |
+        npm -w packages/tape-cli run glyph-train -- ./docs --max-glyphs 5
+        test -f glyphs.json
+        
+    - name: Test CLI bitmap operations
+      run: |
+        npm -w packages/tape-cli run bitmap -- --build
+        npm -w packages/tape-cli run bitmap -- --stats
+        npm -w packages/tape-cli run bitmap -- --test "write flow"
+        
+    - name: Test advanced query options
+      run: |
+        npm -w packages/tape-cli run query -- "write" --and --limit 5
+        npm -w packages/tape-cli run query -- "write" --min-span 2 --max-gap 5
+        npm -w packages/tape-cli run query -- "write" --json
+
+  build-artifacts:
+    runs-on: ubuntu-latest
+    needs: test
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Build packages
+      run: npm run build
+      
+    - name: Create web demo package
+      run: |
+        cd packages/tape-web
+        npm run build
+        cd dist
+        zip -r ../../../fractal-tape-web-demo.zip .
+        cd ../../..
+        
+    - name: Create CLI package
+      run: |
+        mkdir -p fractal-tape-cli
+        cp -r packages/tape-cli/dist/* fractal-tape-cli/
+        cp packages/tape-core/dist/*.js fractal-tape-cli/
+        cp packages/tape-core/dist/*.d.ts fractal-tape-cli/
+        cp package.json fractal-tape-cli/
+        cp README.md fractal-tape-cli/
+        cp LICENSE fractal-tape-cli/
+        zip -r fractal-tape-cli.zip fractal-tape-cli/
+        
+    - name: Upload web demo artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: fractal-tape-web-demo
+        path: fractal-tape-web-demo.zip
+        retention-days: 30
+        
+    - name: Upload CLI artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: fractal-tape-cli
+        path: fractal-tape-cli.zip
+        retention-days: 30
+
+  performance-test:
+    runs-on: ubuntu-latest
+    needs: test
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        
+    - name: Install dependencies
+      run: npm ci
+      
+    - name: Build packages
+      run: npm run build
+      
+    - name: Create test dataset
+      run: |
+        mkdir -p test-data
+        for i in {1..10}; do
+          echo "This is test document $i with some sample text for performance testing. It contains multiple sentences and should provide a good test of the fractal tape system's capabilities." > test-data/doc$i.txt
+        done
+        
+    - name: Performance test - ingest
+      run: |
+        time npm -w packages/tape-cli run ingest -- ./test-data
+        echo "Ingest completed"
+        
+    - name: Performance test - query
+      run: |
+        time npm -w packages/tape-cli run query -- "test document" --limit 100
+        echo "Query completed"
+        
+    - name: Performance test - bitmap
+      run: |
+        time npm -w packages/tape-cli run bitmap -- --build
+        time npm -w packages/tape-cli run bitmap -- --test "test document"
+        echo "Bitmap operations completed"
+
+

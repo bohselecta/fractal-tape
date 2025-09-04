@@ -1,0 +1,456 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Fractal Tape • Canvas Demo</title>
+  <style>
+    :root{
+      --bg:#0b0e14; --panel:#0f1320; --line:#1c212b; --text:#e6edf3;
+      --accent:#2bd1ff; --accent2:#ff4df0;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{margin:0;background:radial-gradient(1200px 600px at 20% -10%, rgba(43,209,255,.12), transparent),
+                     radial-gradient(900px 600px at 110% 10%, rgba(255,77,240,.08), transparent), var(--bg);
+         color:var(--text);font:14px/1.6 Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Arial}
+    header.top{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-bottom:1px solid var(--line);
+      background:linear-gradient(180deg,#0b0e14,#0f1320);position:sticky;top:0;z-index:10}
+    .brand{font-weight:800;letter-spacing:1px;font-size:18px}
+    .brand span{color:var(--accent);text-shadow:0 0 20px rgba(43,209,255,.4)}
+    .stats{opacity:.9;font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace}
+
+    .grid{display:grid;grid-template-columns:1fr 1fr 1.2fr;gap:14px;padding:14px}
+    .pane{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px;box-shadow:0 6px 18px rgba(0,0,0,.25);display:flex;flex-direction:column;min-height:320px}
+    .pane h2{margin:0 0 8px;font-size:14px;font-weight:700;opacity:.9;letter-spacing:.5px}
+    textarea{flex:1;resize:vertical;border:1px solid var(--line);border-radius:8px;background:#0b0e14;color:var(--text);padding:10px;font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;min-height:260px;outline:none}
+    textarea[readonly]{opacity:.9}
+    .viewerBar{display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap}
+    .viewerBar button{background:#13192a;border:1px solid var(--line);color:var(--text);padding:6px 10px;border-radius:8px;cursor:pointer}
+    .viewerBar input[type="range"]{vertical-align:middle}
+    canvas{border:1px solid var(--line);border-radius:10px;background:#070a10;display:block;width:100%;height:600px}
+    .small{opacity:.85;font-size:12px}
+  </style>
+</head>
+<body>
+  <header class="top">
+    <div class="brand">FRΛCTAL <span>TAPE</span></div>
+    <div class="stats">
+      <span id="kbIn">0 KB</span> → <span id="kbOut">0 KB</span> 
+      • <span id="compressionRatio">0%</span> reduction
+      • <span id="wordCount">0</span> words → <span id="tokenCount">0</span> tokens
+      • depth <span id="depthD">0</span>
+    </div>
+  </header>
+
+  <section class="grid">
+    <div class="pane">
+      <h2>Input</h2>
+      <div class="viewerBar" style="margin-bottom: 8px;">
+        <button id="loadGlyphs">Load Glyphs</button>
+        <button id="saveGlyphs">Save Glyphs</button>
+        <input id="glyphFile" type="file" accept="application/json" style="display:none"/>
+      </div>
+      <textarea id="input" placeholder="Paste a large text block here..."></textarea>
+    </div>
+    <div class="pane">
+      <h2>Glyphed</h2>
+      <textarea id="glyphed" readonly></textarea>
+    </div>
+    <div class="pane">
+      <h2>Triangle</h2>
+      <div class="viewerBar">
+        <button id="reset">Reset View</button>
+        <button id="toggleGrid">Toggle Grid</button>
+        <label class="small">Max glyphs <input id="maxGlyphs" type="range" min="200" max="25000" value="6000"/></label>
+        <span id="zoomInfo" class="small"></span>
+      </div>
+      <canvas id="view" width="900" height="650"></canvas>
+    </div>
+  </section>
+
+<script>
+// ===== Glyphing =====
+const DEFAULT_GLYPHS = [
+  { phrase: ["i'm","going","to"], glyph: "^%>" },
+  { phrase: ["and","then"], glyph: "€€<" },
+  { phrase: ["until","it","is","finished"], glyph: "⊕" },
+  { phrase: ["after","that"], glyph: "↻" },
+  { phrase: ["a","bit"], glyph: "≈" },
+  { phrase: ["because"], glyph: "∵" },
+  { phrase: ["in","order","to"], glyph: "⇒" }
+]
+function buildTrie(entries){
+  const root = { kids:new Map() }
+  for(const e of entries){
+    let n=root
+    for(const w of e.phrase){ if(!n.kids.has(w)) n.kids.set(w,{kids:new Map()}); n = n.kids.get(w) }
+    n.glyph = e.glyph
+  }
+  return root
+}
+function normalizeWords(s){ return s.toLowerCase().replace(/[^a-z0-9\s']/g,' ').split(/\s+/).filter(Boolean) }
+function encodeWithTrie(words, trie){
+  const out=[]
+  for(let i=0;i<words.length;){
+    let n=trie, j=i, last=null
+    while(j<words.length){ const kid=n.kids.get(words[j]); if(!kid) break; n=kid; if(n.glyph) last={len:j-i+1,glyph:n.glyph}; j++ }
+    if(last){ out.push(last.glyph); i+=last.len } else { out.push(words[i]); i++ }
+  }
+  return out
+}
+function minDepthForSlots(n){ let D=0,cap=1; while(cap<n){D++;cap*=3} return D }
+function toBase3(n,D){ let s=""; for(let k=D-1;k>=0;k--){ const p=Math.trunc(n/(3**k)); s+=(p%3).toString(); n%=3**k } return s }
+
+// ===== Sierpinski addressing & geometry =====
+const SQRT3 = Math.sqrt(3)
+const A = {x:0,y:0}, B={x:1,y:0}, C={x:0.5,y:SQRT3/2}
+const midpoint=(p,q)=>({x:(p.x+q.x)/2,y:(p.y+q.y)/2})
+const centroid=(p,q,r)=>({x:(p.x+q.x+r.x)/3,y:(p.y+q.y+r.y)/3})
+function addressToPoint(base3){ let pA=A,pB=B,pC=C; for(const ch of base3){ const ab=midpoint(pA,pB), bc=midpoint(pB,pC), ca=midpoint(pC,pA)
+  if(ch==='0'){ pB=ab; pC=ca } else if(ch==='1'){ pA=ab; pC=bc } else { pA=ca; pB=bc } }
+  return centroid(pA,pB,pC) }
+
+// ===== UI refs =====
+const elInput = document.getElementById('input')
+const elGlyphed = document.getElementById('glyphed')
+const elKbIn = document.getElementById('kbIn')
+const elKbOut = document.getElementById('kbOut')
+const elCompressionRatio = document.getElementById('compressionRatio')
+const elWordCount = document.getElementById('wordCount')
+const elTokenCount = document.getElementById('tokenCount')
+const elDepth = document.getElementById('depthD')
+const elZoomInfo = document.getElementById('zoomInfo')
+const elReset = document.getElementById('reset')
+const elToggleGrid = document.getElementById('toggleGrid')
+const elMax = document.getElementById('maxGlyphs')
+const elLoadGlyphs = document.getElementById('loadGlyphs')
+const elSaveGlyphs = document.getElementById('saveGlyphs')
+const elGlyphFile = document.getElementById('glyphFile')
+const canvas = document.getElementById('view')
+const ctx = canvas.getContext('2d')
+
+// ===== State =====
+let currentGlyphs = [...DEFAULT_GLYPHS] // Mutable copy of glyphs
+let trie = buildTrie(currentGlyphs)
+let tokens = []
+let positions = []
+let D = 0
+let originalWords = [] // Store original words for snippet display
+
+// viewer transform
+let scale = 0.9 * Math.min(canvas.width, canvas.height)
+let zoom = 1.0
+let offset = { x: canvas.width*0.05, y: canvas.height*0.05 }
+let panning = false
+let panAnchor = {x:0,y:0}, offsetStart={x:0,y:0}
+
+// hover state
+let hoveredIndex = -1
+let tooltip = null
+
+// grid state
+let showGrid = false
+
+function worldToScreen(p){ return { x: offset.x + (p.x * scale * zoom), y: offset.y + ((1 - p.y) * scale * zoom) } }
+function screenToWorld(p){ return { x: (p.x - offset.x) / (scale * zoom), y: 1 - (p.y - offset.y) / (scale * zoom) } }
+
+function toKB(n){ return (n/1024).toFixed(2) + ' KB' }
+
+// ===== Tooltip functions =====
+function createTooltip(){
+  if(tooltip) return tooltip
+  tooltip = document.createElement('div')
+  tooltip.style.cssText = `
+    position: absolute; background: rgba(11,14,20,0.95); border: 1px solid #2bd1ff;
+    border-radius: 8px; padding: 8px 12px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 12px; color: #e6edf3; pointer-events: none; z-index: 1000;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3); max-width: 300px; word-wrap: break-word;
+  `
+  document.body.appendChild(tooltip)
+  return tooltip
+}
+
+function showTooltip(x, y, text){
+  const tip = createTooltip()
+  tip.textContent = text
+  tip.style.left = (x + 10) + 'px'
+  tip.style.top = (y - 10) + 'px'
+  tip.style.display = 'block'
+}
+
+function hideTooltip(){
+  if(tooltip) tooltip.style.display = 'none'
+}
+
+function getSnippet(index, windowSize = 20){
+  if(index < 0 || index >= originalWords.length) return ''
+  const start = Math.max(0, index - windowSize)
+  const end = Math.min(originalWords.length, index + windowSize + 1)
+  const snippet = originalWords.slice(start, end)
+  const before = start > 0 ? '...' : ''
+  const after = end < originalWords.length ? '...' : ''
+  return before + snippet.join(' ') + after
+}
+
+function findNearestGlyph(mouseX, mouseY, maxDistance = 30){
+  let nearest = -1
+  let minDist = maxDistance
+  const maxDraw = parseInt(elMax.value,10)
+  
+  for(let i = 0; i < positions.length && i < maxDraw; i++){
+    const p = worldToScreen(positions[i])
+    const dx = mouseX - p.x
+    const dy = mouseY - p.y
+    const dist = Math.sqrt(dx*dx + dy*dy)
+    if(dist < minDist){
+      minDist = dist
+      nearest = i
+    }
+  }
+  return nearest
+}
+
+// ===== Grid subdivision functions =====
+function drawSubdivisionGrid(){
+  if(!showGrid) return
+  
+  const pxCell = (scale * zoom) * (1 / (2 ** D))
+  if(pxCell < 8) return // Don't draw if too small
+  
+  ctx.strokeStyle = 'rgba(43,209,255,0.15)'
+  ctx.lineWidth = 0.5
+  
+  // Calculate appropriate subdivision level based on zoom
+  const maxLevel = Math.min(D, Math.floor(Math.log2(scale * zoom / 20)))
+  if(maxLevel < 1) return
+  
+  for(let level = 1; level <= maxLevel; level++){
+    const subdivisions = 3 ** level
+    const step = 1 / subdivisions
+    
+    for(let i = 0; i <= subdivisions; i++){
+      const t = i * step
+      
+      // Draw horizontal lines (from left edge to right edge)
+      const left = {x: 0, y: t * SQRT3/2}
+      const right = {x: 1, y: t * SQRT3/2}
+      if(left.y <= SQRT3/2){
+        const p1 = worldToScreen(left)
+        const p2 = worldToScreen(right)
+        ctx.beginPath()
+        ctx.moveTo(p1.x, p1.y)
+        ctx.lineTo(p2.x, p2.y)
+        ctx.stroke()
+      }
+      
+      // Draw diagonal lines (from bottom-left to top)
+      const bottomLeft = {x: t/2, y: 0}
+      const top = {x: 0.5, y: SQRT3/2}
+      if(bottomLeft.x <= 0.5){
+        const p1 = worldToScreen(bottomLeft)
+        const p2 = worldToScreen(top)
+        ctx.beginPath()
+        ctx.moveTo(p1.x, p1.y)
+        ctx.lineTo(p2.x, p2.y)
+        ctx.stroke()
+      }
+      
+      // Draw diagonal lines (from bottom-right to top)
+      const bottomRight = {x: 1 - t/2, y: 0}
+      if(bottomRight.x >= 0.5){
+        const p1 = worldToScreen(bottomRight)
+        const p2 = worldToScreen(top)
+        ctx.beginPath()
+        ctx.moveTo(p1.x, p1.y)
+        ctx.lineTo(p2.x, p2.y)
+        ctx.stroke()
+      }
+    }
+  }
+}
+
+// ===== Glyph import/export functions =====
+function loadGlyphsFromFile(file){
+  const reader = new FileReader()
+  reader.onload = (e) => {
+    try {
+      const data = JSON.parse(e.target.result)
+      if(Array.isArray(data) && data.every(item => 
+        item.phrase && Array.isArray(item.phrase) && item.glyph
+      )){
+        currentGlyphs = data
+        trie = buildTrie(currentGlyphs)
+        updateAll()
+        console.log(`Loaded ${data.length} glyphs`)
+      } else {
+        alert('Invalid glyph file format. Expected array of {phrase: string[], glyph: string}')
+      }
+    } catch(err) {
+      alert('Error parsing glyph file: ' + err.message)
+    }
+  }
+  reader.readAsText(file)
+}
+
+function saveGlyphsToFile(){
+  const dataStr = JSON.stringify(currentGlyphs, null, 2)
+  const dataBlob = new Blob([dataStr], {type: 'application/json'})
+  const url = URL.createObjectURL(dataBlob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = 'glyphs.json'
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  URL.revokeObjectURL(url)
+}
+
+// ===== Render =====
+function render(){
+  ctx.clearRect(0,0,canvas.width,canvas.height)
+  ctx.fillStyle = '#0b0e14'; ctx.fillRect(0,0,canvas.width,canvas.height)
+  // base triangle
+  ctx.strokeStyle = '#2bd1ff'; ctx.lineWidth = 1.2
+  const pA=worldToScreen(A), pB=worldToScreen(B), pC=worldToScreen(C)
+  ctx.beginPath(); ctx.moveTo(pA.x,pA.y); ctx.lineTo(pB.x,pB.y); ctx.lineTo(pC.x,pC.y); ctx.closePath(); ctx.stroke()
+  
+  // subdivision grid
+  drawSubdivisionGrid()
+
+  const maxDraw = parseInt(elMax.value,10)
+  const pxCell = (scale * zoom) * (1 / (2 ** D))
+  const drawLabel = pxCell >= 5
+  ctx.shadowColor = 'rgba(72,255,210,0.35)'; ctx.shadowBlur = 10
+
+  for(let i=0;i<positions.length && i<maxDraw;i++){
+    const p = worldToScreen(positions[i])
+    if (p.x < -50 || p.y < -50 || p.x > canvas.width+50 || p.y > canvas.height+50) continue
+    
+    // Highlight hovered glyph
+    const isHovered = i === hoveredIndex
+    if(isHovered){
+      ctx.shadowColor = 'rgba(255,77,240,0.6)'
+      ctx.shadowBlur = 15
+    }
+    
+    if(drawLabel){
+      ctx.fillStyle = isHovered ? '#ff4df0' : '#a2ffef'
+      ctx.font = Math.max(10, pxCell) + 'px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace'
+      ctx.fillText(tokens[i], p.x, p.y)
+    } else {
+      ctx.fillStyle = isHovered ? '#ff4df0' : '#2bd1ff'
+      ctx.beginPath()
+      ctx.arc(p.x, p.y, isHovered ? 3 : 1.5, 0, Math.PI*2)
+      ctx.fill()
+    }
+    
+    // Reset shadow for next iteration
+    if(isHovered){
+      ctx.shadowColor = 'rgba(72,255,210,0.35)'
+      ctx.shadowBlur = 10
+    }
+  }
+  elZoomInfo.textContent = `zoom ${zoom.toFixed(2)} • cell ${pxCell.toFixed(1)}px`
+}
+
+function updateAll(){
+  const words = normalizeWords(elInput.value)
+  originalWords = words // Store for snippet display
+  tokens = encodeWithTrie(words, trie)
+  elGlyphed.value = tokens.join(' ')
+
+  const enc = new TextEncoder()
+  const inputBytes = enc.encode(elInput.value).length
+  const outputBytes = enc.encode(elGlyphed.value).length
+  
+  elKbIn.textContent = toKB(inputBytes)
+  elKbOut.textContent = toKB(outputBytes)
+  
+  // Calculate compression ratio
+  const compressionRatio = inputBytes > 0 ? ((inputBytes - outputBytes) / inputBytes * 100) : 0
+  elCompressionRatio.textContent = compressionRatio.toFixed(1) + '%'
+  
+  // Word and token counts
+  elWordCount.textContent = words.length.toString()
+  elTokenCount.textContent = tokens.length.toString()
+
+  const N = tokens.length
+  D = Math.max(1, minDepthForSlots(N||1))
+  elDepth.textContent = String(D)
+
+  positions = new Array(N)
+  for(let i=0;i<N;i++) positions[i] = addressToPoint(toBase3(i, D))
+  
+  // Reset hover state when content changes
+  hoveredIndex = -1
+  hideTooltip()
+  render()
+}
+
+// zoom
+canvas.addEventListener('wheel', (ev)=>{
+  ev.preventDefault()
+  const delta = -ev.deltaY
+  const factor = Math.exp(delta * 0.001)
+  const rect = canvas.getBoundingClientRect()
+  const mouse = { x: ev.clientX - rect.left, y: ev.clientY - rect.top }
+  const before = screenToWorld(mouse)
+  zoom = Math.max(.2, Math.min(6, zoom * factor))
+  const after = screenToWorld(mouse)
+  const dx = (after.x - before.x) * scale * zoom
+  const dy = (after.y - before.y) * scale * zoom
+  offset.x += dx; offset.y += dy
+  render()
+}, {passive:false})
+
+// pan
+canvas.addEventListener('mousedown', (ev)=>{ panning=true; panAnchor={x:ev.clientX, y:ev.clientY}; offsetStart={...offset} })
+window.addEventListener('mouseup', ()=>{ panning=false })
+window.addEventListener('mousemove', (ev)=>{ if(!panning) return; const dx=ev.clientX-panAnchor.x, dy=ev.clientY-panAnchor.y; offset.x=offsetStart.x+dx; offset.y=offsetStart.y+dy; render() })
+
+// hover detection
+canvas.addEventListener('mousemove', (ev)=>{
+  if(panning) return
+  const rect = canvas.getBoundingClientRect()
+  const mouseX = ev.clientX - rect.left
+  const mouseY = ev.clientY - rect.top
+  
+  const nearest = findNearestGlyph(mouseX, mouseY)
+  if(nearest !== hoveredIndex){
+    hoveredIndex = nearest
+    if(nearest >= 0){
+      const snippet = getSnippet(nearest)
+      const glyph = tokens[nearest]
+      const tooltipText = `addr ${nearest} • "${glyph}"\n${snippet}`
+      showTooltip(ev.clientX, ev.clientY, tooltipText)
+    } else {
+      hideTooltip()
+    }
+    render()
+  }
+})
+
+canvas.addEventListener('mouseleave', ()=>{
+  hoveredIndex = -1
+  hideTooltip()
+  render()
+})
+
+document.getElementById('reset').onclick = ()=>{ zoom=1; offset={ x: canvas.width*0.05, y: canvas.height*0.05 }; render() }
+
+document.getElementById('toggleGrid').onclick = ()=>{ showGrid=!showGrid; elToggleGrid.textContent=showGrid?'Hide Grid':'Toggle Grid'; render() }
+
+document.getElementById('loadGlyphs').onclick = ()=>{ elGlyphFile.click() }
+document.getElementById('saveGlyphs').onclick = saveGlyphsToFile
+elGlyphFile.onchange = (ev)=>{ if(ev.target.files?.[0]) loadGlyphsFromFile(ev.target.files[0]) }
+
+document.getElementById('maxGlyphs').oninput = render
+
+// seed text
+elInput.value = "I'm going to sit down and then write until it is finished, because if I stop too early I'll lose my flow. After that I'll edit it a bit and then share it. I'm going to outline the second piece and then draft it."
+updateAll()
+elInput.addEventListener('input', updateAll)
+</script>
+</body>
+</html>

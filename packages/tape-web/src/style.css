@@ -1,0 +1,9 @@
+body{margin:0;background:#0b0e14;color:#e6edf3;font:15px/1.5 system-ui,Segoe UI,Roboto,Arial,sans-serif}
+.top{padding:20px;border-bottom:1px solid #1c212b;background:linear-gradient(180deg,#0b0e14,#0f1320)}
+h1{margin:0;font-size:24px}.sub{opacity:.8;margin:4px 0 0}.panel{padding:16px}
+.controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+input#q{flex:1;min-width:260px;padding:8px;border-radius:6px;border:1px solid #1c212b;background:#0f1320;color:#e6edf3}
+button{padding:8px 12px;border:1px solid #1c212b;background:#13192a;color:#e6edf3;border-radius:6px;cursor:pointer}
+ul{list-style:none;padding:0;margin:12px 0 0}li{padding:6px 8px;border-bottom:1px solid #1c212b}
+.badge{display:inline-block;padding:2px 6px;border:1px solid #1c212b;border-radius:4px;background:#0b0e14;margin-right:6px}
+.small{opacity:.8;font-size:12px}
