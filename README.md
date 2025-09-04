@@ -1,36 +1,66 @@
-# Fractal Tape
+# Fractal Tape - Glyph Trainer
 
-> **Local-first, glyph-compressed, addressable retrieval substrate**
+> **Interactive glyph compression with layered mining and fractal triangle visualization**
 
 [![Build Status](https://github.com/bohselecta/fractal-tape/workflows/CI/badge.svg)](https://github.com/bohselecta/fractal-tape/actions)
 [![Version](https://img.shields.io/badge/version-0.2.0-blue.svg)](https://github.com/bohselecta/fractal-tape/releases)
 
-Fractal Tape is a novel approach to document indexing and retrieval that uses **glyph-based compression** and **fractal addressing** for efficient, offline-first search capabilities. Documents are encoded into a compact glyph representation and positioned within a Sierpinski triangle for spatial indexing.
+Fractal Tape is an interactive glyph compression system that uses **layered mining** and **fractal addressing** to discover and compress text patterns. Documents are encoded into compact glyph representations and visualized within a Sierpinski triangle for spatial exploration.
 
-## 🎯 **Key Concepts**
+## 🎯 **Core Concepts**
 
-### Glyph Compression
+### Layered Mining System
+The system discovers patterns through recursive analysis:
+
+- **Layer 1**: Mines n-grams directly from input text
+- **Layer 2+**: Encodes with previous layers, then mines from the encoded stream
+- **Progressive Discovery**: Each layer finds patterns in the previous layer's output
+
+### Mathematical Foundation
+
+#### Sierpinski Triangle Addressing
+Each glyph gets a unique address in the fractal triangle:
+
+```
+Address: base-3 string (e.g., "012", "201")
+Point: (x, y) coordinates in unit triangle
+
+For address a = (a₁, a₂, ..., aₙ):
+- Start with triangle vertices A=(0,0), B=(1,0), C=(0.5,√3/2)
+- For each digit aᵢ:
+  - '0': Keep (A, midpoint(A,B), midpoint(A,C))
+  - '1': Keep (midpoint(A,B), B, midpoint(B,C))  
+  - '2': Keep (midpoint(A,C), midpoint(B,C), C)
+- Final point = centroid of resulting triangle
+```
+
+#### Glyph Compression
 Transform common phrases into single glyphs:
-- `"i'm going to"` → `"^%>"`
-- `"and then"` → `"€€<"`
-- `"until it is finished"` → `"⊕"`
 
-### Fractal Addressing
-Each token gets a unique address in a Sierpinski triangle:
-- **Base-3 addressing** for deterministic positioning
-- **Sequential addresses** for append-only ingestion
-- **Spatial indexing** for efficient range queries
+```
+Input: "i'm going to write some code"
+Layer 1: "i'm going to" → "~A", "write some code" → "~b"
+Layer 2: "~A ~b" → "~AA" (if pattern repeats)
+```
 
-### Offline-First Design
-- **No servers** beyond Vite/Preview
-- **No SSR** or browser databases
-- **Static file exports** for web demos
-- **Local SQLite** for ingestion only
+#### Benefit-Scored Ranking
+Phrases are ranked by actual compression benefit:
+
+```
+gain(p) = c × (chars(p) - chars(γ)) - λ × chars(rule(p))
+
+Where:
+- p = phrase being evaluated
+- γ = glyph replacement
+- c = frequency count
+- λ = complexity penalty (typically 1.0)
+- rule(p) = encoding rule for phrase p
+```
 
 ## 🚀 **Quick Start**
 
 ### Prerequisites
-- Node.js 18+
+- Node.js 20+
 - npm
 
 ### Installation
@@ -40,103 +70,145 @@ cd fractal-tape
 npm install
 ```
 
-### Basic Usage
+### Interactive Web Demo
 ```bash
-# 1) Ingest documents (creates tape.db)
-npm -w packages/tape-cli run ingest -- ./docs
-
-# 2) Query with advanced options
-npm -w packages/tape-cli run query -- "i'm going to write" --and --limit 10
-
-# 3) Export for web demo
-npm -w packages/tape-cli run export -- ./packages/tape-web/public/export.json
-
-# 4) Run interactive web demo
+# Start the development server
 npm -w packages/tape-web run dev
+
 # Open http://localhost:5173
 ```
+
+## 🎮 **Web Demo Features**
+
+### Interactive Triangle Viewer
+- **Zoom & Pan**: Mouse wheel zooms under cursor, drag to pan
+- **Hover Tooltips**: Shows fractal addresses (e.g., "012", "201") in real-time
+- **Grid Overlay**: Toggle subdivision lines to see fractal structure
+- **DPR-Aware**: Pixel-perfect interactions on all display types
+
+### Layered Mining Controls
+- **Layer Depth**: 1-3 layers of recursive pattern discovery
+- **ASCII Glyphs**: Deterministic glyph generation with custom prefixes
+- **N-gram Range**: 2-5 word phrases for pattern mining
+- **Live Stats**: Real-time compression ratios and token counts
+
+### Glyph Management
+- **Load/Save**: Import/export custom glyph dictionaries
+- **Legend Display**: Shows glyph mappings with layer information
+- **Live Encoding**: Updates in real-time as you type
 
 ## 📊 **Performance**
 
 - **Encoding**: 50k tokens in < 250ms
 - **Web UI**: < 16ms typing latency, 20k glyphs @ 60fps
-- **Database**: 50k+ tokens/s ingestion rate
+- **Layered Mining**: 2k-10k words in < 200ms
 - **Compression**: 20-40% size reduction with custom glyphs
+- **Hover Response**: < 1ms address calculation
 
 ## 🛠 **Architecture**
 
 ```
 packages/
-├── tape-core/     # Core library: glyph encoder, SQLite store, utilities
-├── tape-cli/      # CLI tools: ingest, query, export, glyph-train, bitmap
-└── tape-web/      # Web demo: Vite static site with canvas visualization
+├── tape-core/     # Core algorithms: mining, encoding, fractal math
+├── tape-cli/      # CLI tools: encode, decode, pack, unpack
+└── tape-web/      # Interactive demo: layered mining, triangle viewer
 ```
 
 ### Core Components
 
-- **`tape-core`** — Glyph encoding, SQLite storage, address math, bitmap indexing
-- **`tape-cli`** — Command-line tools with advanced query options
-- **`tape-web`** — Interactive canvas demo with hover tooltips and grid overlay
+- **`tape-core`** — Layered mining, ASCII glyph pools, fractal addressing
+- **`tape-cli`** — Command-line encoding/decoding tools
+- **`tape-web`** — Interactive canvas demo with hover tooltips
 
-## 🎮 **Web Demo Features**
+## 🧮 **Mathematical Details**
 
-The web demo (`fractal_tape_canvas_ui_demo.html`) includes:
+### Fractal Address Mathematics
 
-- **Interactive triangle viewer** with zoom/pan controls
-- **Hover tooltips** showing ±20 tokens around each glyph
-- **Subdivision grid overlay** for fractal structure visualization
-- **Glyph dictionary import/export** for custom compression
-- **Real-time analytics** showing compression ratios and token counts
-- **Customizable glyphs** with live encoding updates
+#### Base-3 Conversion
+```typescript
+function toBase3(idx: number, D: number): string {
+  let s = "";
+  for (let k = D - 1; k >= 0; k--) {
+    const p = Math.trunc(idx / (3 ** k));
+    s += (p % 3).toString();
+    idx %= 3 ** k;
+  }
+  return s;
+}
+```
+
+#### Point-to-Address Inverse
+```typescript
+function pointToAddress(p: Vec, D: number): string {
+  let a = A, b = B, c = C;
+  let code = '';
+  for (let i = 0; i < D; i++) {
+    const ab = midpoint(a, b), bc = midpoint(b, c), ca = midpoint(c, a);
+    if (pointInTri(p, a, ab, ca)) {
+      code += '0'; b = ab; c = ca;
+    } else if (pointInTri(p, ab, b, bc)) {
+      code += '1'; a = ab; c = bc;
+    } else {
+      code += '2'; a = ca; b = bc;
+    }
+  }
+  return code;
+}
+```
+
+### Layered Mining Algorithm
+
+#### Layer 1: Direct Mining
+```typescript
+function mineLayer1(text: string, top: number): GlyphEntry[] {
+  const words = normalizeWords(text);
+  const phrases = minePhrases(words, top);
+  const pool = asciiGlyphPool("~", 2);
+  return phrases.map((phrase, i) => ({
+    layer: 1,
+    phrase,
+    glyph: pool[i]
+  }));
+}
+```
+
+#### Layer 2+: Encoded Stream Mining
+```typescript
+function mineLayerN(encodedTokens: string[], layer: number): GlyphEntry[] {
+  const phrases = minePhrases(encodedTokens, top);
+  const pool = asciiGlyphPool("~", 2);
+  return phrases.map((phrase, i) => ({
+    layer,
+    phrase,
+    glyph: pool[i]
+  }));
+}
+```
 
 ## 📋 **CLI Commands**
 
-### Ingest
+### Encoding/Decoding
 ```bash
-# Ingest documents
-npm -w packages/tape-cli run ingest -- ./docs
+# Encode text with glyphs
+echo "hello world" | npm -w packages/tape-cli run encode -- --glyphs glyphs.json
 
-# Ingest specific files
-npm -w packages/tape-cli run ingest -- file1.txt file2.md
-```
+# Decode glyphs back to text
+echo "~A ~b" | npm -w packages/tape-cli run decode -- --glyphs glyphs.json
 
-### Query
-```bash
-# Basic query
-npm -w packages/tape-cli run query -- "search terms"
+# Pack encoded stream
+npm -w packages/tape-cli run pack -- input.txt --glyphs glyphs.json --output output.ftz
 
-# Advanced options
-npm -w packages/tape-cli run query -- "terms" --and --limit 20 --json
-
-# Windowing
-npm -w packages/tape-cli run query -- "text" --min-span 3 --max-gap 5
-```
-
-### Export
-```bash
-# Export for web demo
-npm -w packages/tape-cli run export -- ./packages/tape-web/public/export.json
+# Unpack and decode
+npm -w packages/tape-cli run unpack -- output.ftz --output decoded.txt
 ```
 
 ### Glyph Training
 ```bash
-# Generate custom glyphs from frequency analysis
-npm -w packages/tape-cli run glyph-train -- ./docs --max-glyphs 20
+# Train glyphs from documents
+npm -w packages/tape-cli run glyph-train -- ./docs --top 256 --ascii
 
-# Use custom glyphs for ingestion
-npm -w packages/tape-cli run ingest -- ./docs --glyphs ./custom-glyphs.json
-```
-
-### Bitmap Index
-```bash
-# Build bitmap index for fast queries
-npm -w packages/tape-cli run bitmap -- --build
-
-# Show index statistics
-npm -w packages/tape-cli run bitmap -- --stats
-
-# Test performance
-npm -w packages/tape-cli run bitmap -- --test "query terms"
+# Custom parameters
+npm -w packages/tape-cli run glyph-train -- ./docs --top 512 --nmin 2 --nmax 5 --prefix "~" --levels 2
 ```
 
 ## 🔧 **Development**
@@ -154,36 +226,12 @@ npm -w packages/tape-web run build
 
 ### Testing
 ```bash
-# Run tests (when implemented)
+# Run tests
 npm test
 
-# Test CLI functionality
-npm -w packages/tape-cli run ingest -- ./docs
-npm -w packages/tape-cli run query -- "test query"
+# Test web demo
+npm -w packages/tape-web run dev
 ```
-
-## 📈 **Advanced Features**
-
-### Query Options
-- **`--and`** / **`--intersection`** - Find documents containing ALL terms
-- **`--or`** / **`--union`** - Find documents containing ANY terms (default)
-- **`--window <k>`** - Pack adjacent addresses into spans with gap ≤ k
-- **`--min-span <n>`** - Minimum span size to include
-- **`--max-gap <k>`** - Maximum gap between addresses in same span
-- **`--limit <n>`** - Limit results to n hits
-- **`--json`** - Compact JSON output
-
-### Bitmap Indexing
-- **Roaring bitmaps** for O(1) set operations
-- **Multi-token AND queries** across 1k+ docs in < 10ms
-- **Memory-efficient** compression for large datasets
-- **Performance benchmarking** vs traditional queries
-
-### Address Mathematics
-- **Base-3 conversions** for fractal positioning
-- **Sierpinski triangle geometry** with precise coordinates
-- **Spatial indexing** for range queries
-- **Round-trip validation** for address accuracy
 
 ## 🎨 **Customization**
 
@@ -192,39 +240,61 @@ Create custom glyph dictionaries for domain-specific compression:
 
 ```json
 [
-  {"phrase": ["machine", "learning"], "glyph": "🤖"},
-  {"phrase": ["artificial", "intelligence"], "glyph": "🧠"},
-  {"phrase": ["neural", "network"], "glyph": "🕸️"}
+  {"layer": 1, "phrase": ["machine", "learning"], "glyph": "~A"},
+  {"layer": 1, "phrase": ["artificial", "intelligence"], "glyph": "~b"},
+  {"layer": 2, "phrase": ["~A", "~b"], "glyph": "~AA"}
 ]
 ```
 
-### Web Demo Styling
-Customize the web demo appearance in `fractal_tape_canvas_ui_demo.html`:
-- **Colors**: Modify `--accent` and `--accent2` CSS variables
-- **Canvas size**: Adjust `<canvas>` width/height attributes
-- **Glyphs**: Edit `DEFAULT_GLYPHS` array in the script section
+### ASCII Glyph Pools
+Customize glyph generation:
+
+```typescript
+const pool = asciiGlyphPool("~", 2); // "~A", "~b", ..., "~AA", "~Ab", ...
+// Results in: ["~A", "~b", "~c", ..., "~AA", "~Ab", "~Ac", ...]
+```
+
+## 📈 **Advanced Features**
+
+### DPR-Aware Canvas
+- **Device Pixel Ratio** scaling for crisp rendering
+- **Mouse coordinate conversion** for pixel-perfect interactions
+- **Zoom under cursor** with no drift
+- **Smooth panning** on all display types
+
+### Hover Interactions
+- **Real-time address calculation** for mouse position
+- **Crosshair overlay** showing exact position
+- **Address bubble** displaying fractal coordinates
+- **Works at any zoom level** regardless of label visibility
+
+### Layered Compression
+- **Recursive pattern discovery** through multiple layers
+- **Progressive complexity** as layers increase
+- **Union encoding** using all layers up to selected depth
+- **Visual layer indicators** in legend display
 
 ## 📚 **API Reference**
 
 ### Core Functions
 ```typescript
-// Encoding
-encodeTextToTokens(text: string, glyphs?: GlyphEntry[]): string[]
-ingestDocsToStore(docs: string[], dbPath?: string, glyphs?: GlyphEntry[]): IngestStats
+// Layered mining
+trainLayeredGlyphs(text: string, layerDepth: number, opts?: MiningOptions): void
+mineFromEncodedStream(tokens: string[], layer: number, top: number): GlyphEntry[]
+getGlyphsUpToLayer(maxLayer: number): GlyphEntry[]
 
-// Address math
-addrToBase3(addr: number, D: number): string
-base3ToAddr(base3: string): number
-addressToPoint(base3: string): Point2D
+// Fractal addressing
+addressToPoint(code: string): Vec
+pointToAddress(p: Vec, D: number): string
+pointInTri(p: Vec, a: Vec, b: Vec, c: Vec): boolean
 
-// Windowing
-packAddressesIntoSpans(addresses: number[], maxGap: number): AddressSpan[]
-findMinMaxSpans(addresses: number[], minSpan: number, maxGap: number): AddressSpan[]
+// ASCII glyph pools
+asciiGlyphPool(prefix: string, levels: number): string[]
+buildAsciiGlyphsForTape(text: string, opts?: GlyphOptions): GlyphEntry[]
 
-// Bitmap indexing
-buildBitmapIndexFromStore(store: TapeStore): BitmapIndex
-intersectTokenDocs(index: BitmapIndex, tokens: string[]): number[]
-unionTokenDocs(index: BitmapIndex, tokens: string[]): number[]
+// Canvas utilities
+canvasScale(el: HTMLCanvasElement): ScaleInfo
+toCanvasPoint(ev: MouseEvent, el: HTMLCanvasElement): Point2D
 ```
 
 ## 🤝 **Contributing**
@@ -233,7 +303,7 @@ This project is currently **proprietary**. For permission requests or collaborat
 
 ## 📄 **License**
 
-**Proprietary - All Rights Reserved**
+**FRACTAL TAPE - READ-ONLY LICENSE (FTROL)**
 
 Viewing permitted; no use, reproduction, or derivative works without explicit permission.
 
@@ -245,4 +315,4 @@ See [LICENSE](LICENSE) for details.
 
 ---
 
-*Fractal Tape v0.2.0 - Local-first document retrieval with fractal addressing*
+*Fractal Tape v0.2.0 - Interactive glyph compression with layered mining and fractal visualization*
