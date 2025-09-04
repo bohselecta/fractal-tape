@@ -1,0 +1,50 @@
+# Cursor Rules • Fractal Tape (Glyph-Trainer)
+# Purpose: keep the project static-first, deterministic, and elegant.
+
+## Golden constraints
+- Static/offline first. No servers; no SSR. Browser code must run from /packages/tape-web/dist.
+- Node-only DB (better-sqlite3) is allowed for ingest; never in the browser.
+- No network calls, telemetry, or external CDNs (fonts, scripts).
+
+## Languages & tooling
+- TypeScript 5+; Node 20+; target ES2020.
+- Build systems: tsc and Vite only.
+- Styling: single CSS file; tokens in :root. No UI frameworks.
+
+## Code style
+- TS "strict": true. No implicit any.
+- Pure functions in core. DOM only in tape-web.
+- ≤ ~60 LOC per function; extract helpers.
+- Name verbs for actions (encodeTextToTokens), nouns for data (GlyphEntry).
+- Return POJOs; avoid class singletons.
+
+## Structure (do not reshuffle without approval)
+packages/
+  tape-core/   # encoder, utils, (Node) store
+  tape-cli/    # ingest | query | export
+  tape-web/    # static UI (Vite) – Canvas/SVG only
+docs/
+
+## Performance guardrails
+- UI typing → re-glyph ≤ 16ms/frame (debounced).
+- Render ≥ 20k points as dots @ 60fps (typical laptop).
+- Encode 50k tokens in < 250ms (Node).
+
+## Security/IP
+- No outbound requests. No analytics.
+- Respect repo LICENSE (read-only unless changed).
+
+## Deliverables/PRs
+- PR description = unified diff summary + "How to test".
+- For UI: include a GIF and keyboard/mouse notes.
+- For core: include microbenchmarks (inputs, ops/s).
+
+## Done = Tested
+- `npm -w packages/tape-web run build` passes.
+- Acceptance checks in TODO.md ticked.
+- README updated when user-visible behavior changes.
+
+## If in doubt
+- Prefer a smaller composable API over a "smart" object.
+- Prefer explicit parameters over hidden globals.
+- Propose static alternatives before adding a server.

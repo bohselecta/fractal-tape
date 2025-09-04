@@ -49,9 +49,10 @@
       <div class="viewerBar" style="margin-bottom: 8px;">
         <button id="loadGlyphs">Load Glyphs</button>
         <button id="saveGlyphs">Save Glyphs</button>
+        <button id="glyphNow" style="background: var(--accent); color: #000; font-weight: 600; transition: all 0.2s;">Glyph Now</button>
         <input id="glyphFile" type="file" accept="application/json" style="display:none"/>
       </div>
-      <textarea id="input" placeholder="Paste a large text block here..."></textarea>
+      <textarea id="input" placeholder="Paste your lorem ipsum text here, then click 'Glyph Now' to encode it..."></textarea>
     </div>
     <div class="pane">
       <h2>Glyphed</h2>
@@ -443,6 +444,16 @@ document.getElementById('toggleGrid').onclick = ()=>{ showGrid=!showGrid; elTogg
 
 document.getElementById('loadGlyphs').onclick = ()=>{ elGlyphFile.click() }
 document.getElementById('saveGlyphs').onclick = saveGlyphsToFile
+document.getElementById('glyphNow').onclick = ()=>{
+  const btn = document.getElementById('glyphNow')
+  btn.style.background = 'var(--accent2)'
+  btn.textContent = 'Glyphing...'
+  updateAll()
+  setTimeout(() => {
+    btn.style.background = 'var(--accent)'
+    btn.textContent = 'Glyph Now'
+  }, 200)
+}
 elGlyphFile.onchange = (ev)=>{ if(ev.target.files?.[0]) loadGlyphsFromFile(ev.target.files[0]) }
 
 document.getElementById('maxGlyphs').oninput = render
@@ -450,7 +461,7 @@ document.getElementById('maxGlyphs').oninput = render
 // seed text
 elInput.value = "I'm going to sit down and then write until it is finished, because if I stop too early I'll lose my flow. After that I'll edit it a bit and then share it. I'm going to outline the second piece and then draft it."
 updateAll()
-elInput.addEventListener('input', updateAll)
+// elInput.addEventListener('input', updateAll) // Removed - now using manual "Glyph Now" button
 </script>
 </body>
 </html>

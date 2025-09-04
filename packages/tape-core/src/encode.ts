@@ -1,6 +1,8 @@
 import { buildTrie, encodeWithTrie, DEFAULT_GLYPHS } from './glyph.js';
-import { normalizeWords, minDepthForSlots } from './utils.js';
-import type { GlyphEntry, IngestStats, Address, Token } from './types.js';
+import { normalizeWords } from './utils.js';
+import { minDepthForSlots } from './address.js';
+import type { IngestStats, Address, Token } from './types.js';
+import type { GlyphEntry } from './trainer.js';
 import { openStore } from './store.js';
 export function encodeTextToTokens(text:string,glyphs:GlyphEntry[]=DEFAULT_GLYPHS){const words=normalizeWords(text);const trie=buildTrie(glyphs);return encodeWithTrie(words,trie);}
 export function ingestDocsToStore(docs:string[],dbPath='tape.db',glyphs:GlyphEntry[]=DEFAULT_GLYPHS):IngestStats{

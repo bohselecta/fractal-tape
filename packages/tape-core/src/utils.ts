@@ -1,5 +1,4 @@
-export function minDepthForSlots(n:number){let D=0,cap=1; while(cap<n){D++; cap*=3;} return D;}
-export function toBase3(n:number,D:number){let s=""; for(let k=D-1;k>=0;k--){const p=Math.trunc(n/(3**k)); s+=(p%3).toString(); n%=3**k;} return s;}
+import { toBase3 } from './path.js';
 
 // ===== Address Math Utilities =====
 export function base3ToAddr(base3: string): number {

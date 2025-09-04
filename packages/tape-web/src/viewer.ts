@@ -1,0 +1,35 @@
+import { A,B,C, addressToPoint, Vec } from "./sierpinski";
+
+export type Transform = { scale:number; zoom:number; offset:{x:number;y:number} };
+
+export function worldToScreen(t:Transform, p:Vec):Vec {
+  return { x: t.offset.x + (p.x * t.scale * t.zoom), y: t.offset.y + ((1 - p.y) * t.scale * t.zoom) };
+}
+
+export function screenToWorld(t:Transform, p:Vec):Vec {
+  return { x: (p.x - t.offset.x) / (t.scale * t.zoom), y: 1 - (p.y - t.offset.y) / (t.scale * t.zoom) };
+}
+
+export function drawBaseTriangle(ctx:CanvasRenderingContext2D, t:Transform){
+  ctx.strokeStyle = '#2bd1ff'; ctx.lineWidth = 1.2;
+  const pA=worldToScreen(t,A), pB=worldToScreen(t,B), pC=worldToScreen(t,C);
+  ctx.beginPath(); ctx.moveTo(pA.x,pA.y); ctx.lineTo(pB.x,pB.y); ctx.lineTo(pC.x,pC.y); ctx.closePath(); ctx.stroke();
+}
+
+export function drawGrid(ctx:CanvasRenderingContext2D, t:Transform, depth:number){
+  ctx.strokeStyle = 'rgba(43,209,255,0.18)'; ctx.lineWidth = 0.7;
+  function rec(a:Vec,b:Vec,c:Vec,d:number){
+    if (d===0) return;
+    const ab={x:(a.x+b.x)/2,y:(a.y+b.y)/2}, bc={x:(b.x+c.x)/2,y:(b.y+c.y)/2}, ca={x:(c.x+a.x)/2,y:(c.y+a.y)/2};
+    const m1=worldToScreen(t,ab), m2=worldToScreen(t,bc), m3=worldToScreen(t,ca);
+    ctx.beginPath(); ctx.moveTo(m1.x,m1.y); ctx.lineTo(m2.x,m2.y); ctx.lineTo(m3.x,m3.y); ctx.closePath(); ctx.stroke();
+    rec(a,ab,ca,d-1); rec(ab,b,bc,d-1); rec(ca,bc,c,d-1);
+  }
+  rec(A,B,C,depth);
+}
+
+export function computePositions(N:number, toBase3:(n:number,D:number)=>string, D:number){
+  const pts:Vec[] = new Array(N);
+  for (let i=0;i<N;i++) pts[i] = addressToPoint(toBase3(i,D));
+  return pts;
+}

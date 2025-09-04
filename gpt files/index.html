@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Fractal Tape • Stable Glyph Trainer</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header class="top">
+    <div class="brand">FRΛCTAL <span>TAPE</span></div>
+    <div class="stats"><span id="kbIn">0 KB</span> → <span id="kbOut">0 KB</span> • <span id="ratio">0%</span> • <span id="counts">0→0</span> • depth <span id="depthD">0</span></div>
+  </header>
+  <section class="grid">
+    <div class="pane">
+      <h2>Input</h2>
+      <div class="viewerBar">
+        <button id="loadGlyphs">Load Glyphs</button>
+        <button id="saveGlyphs">Save Glyphs</button>
+        <button id="glyphNow">Glyph Now</button>
+        <label class="small">Top <input id="topK" type="number" value="128" min="16" max="1024" style="width:70px" /></label>
+        <label class="small">n-min <input id="nMin" type="number" value="2" min="2" max="8" style="width:60px" /></label>
+        <label class="small">n-max <input id="nMax" type="number" value="5" min="2" max="8" style="width:60px" /></label>
+      </div>
+      <textarea id="input" placeholder="Paste a large text block here..."></textarea>
+    </div>
+    <div class="pane">
+      <h2>Glyphed</h2>
+      <textarea id="glyphed" readonly></textarea>
+    </div>
+    <div class="pane">
+      <h2>Triangle</h2>
+      <div class="viewerBar">
+        <button id="reset">Reset View</button>
+        <button id="toggleGrid">Toggle Grid</button>
+        <label class="small">Max glyphs <input id="maxGlyphs" type="range" min="200" max="25000" value="6000"/></label>
+        <span id="zoomInfo" class="small"></span>
+      </div>
+      <canvas id="view" width="900" height="650"></canvas>
+    </div>
+  </section>
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

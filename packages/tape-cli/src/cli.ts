@@ -3,6 +3,87 @@ import fs from 'node:fs'; import path from 'node:path'; import { glob } from 'gl
 import { ingestDocsToStore, encodeTextToTokens, openStore, buildBitmapIndexFromStore, bitmapStats, intersectTokenDocs, unionTokenDocs } from '@fractaltape/tape-core';
 import { packAddressesIntoSpans, findMinMaxSpans, mergeOverlappingSpans, type AddressSpan } from '@fractaltape/tape-core';
 
+// ASCII glyph system (copied from tape-web for CLI use)
+type GlyphEntry = { phrase: string[]; glyph: string };
+
+const ALPHA = "!#$%()*+,-./:;=?@[]^_{|}~" + "ABCDEFGHIJKLMNOPQRSTUVWXYZ" + "abcdefghijklmnopqrstuvwxyz" + "0123456789";
+
+function fnv1a32(str: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0);
+}
+
+function mulberry32(seed: number) {
+  return function() {
+    let t = seed += 0x6D2B79F5;
+    t = Math.imul(t ^ (t >>> 15), 1 | t);
+    t ^= t + Math.imul(t ^ (t >>> 7), 61 | t);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function asciiGlyphPool(prefix = "~", levels = 2, alphabet = ALPHA): string[] {
+  const pool: string[] = [];
+  for (let L = 1; L <= levels; L++) {
+    const recur = (s: string, d: number) => {
+      if (d === 0) { pool.push(prefix + s); return; }
+      for (let i = 0; i < alphabet.length; i++) recur(s + alphabet[i], d - 1);
+    };
+    recur("", L);
+  }
+  return pool;
+}
+
+function shuffle<T>(arr: T[], seedStr: string): T[] {
+  const rand = mulberry32(fnv1a32(seedStr));
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function normalizeWords(s: string): string[] {
+  return s.toLowerCase().replace(/[^a-z0-9\s']/g, " ").split(/\s+/).filter(Boolean);
+}
+
+function minePhrases(words: string[], top = 96) {
+  const freq = new Map<string, number>();
+  for (let i = 0; i < words.length; i++) {
+    if (i + 1 < words.length) {
+      const k2 = `${words[i]}\u0001${words[i + 1]}`;
+      freq.set(k2, (freq.get(k2) || 0) + 1);
+    }
+    if (i + 2 < words.length) {
+      const k3 = `${words[i]}\u0001${words[i + 1]}\u0001${words[i + 2]}`;
+      freq.set(k3, (freq.get(k3) || 0) + 1);
+    }
+  }
+  const items = [...freq.entries()].sort((a, b) => {
+    const la = a[0].split("\u0001").length, lb = b[0].split("\u0001").length;
+    if (b[1] !== a[1]) return b[1] - a[1];
+    if (lb !== la) return lb - la;
+    return a[0].localeCompare(b[0]);
+  }).slice(0, top);
+  return items.map(([k]) => k.split("\u0001"));
+}
+
+function buildAsciiGlyphsForTape(
+  text: string,
+  opts?: { top?: number; prefix?: string; levels?: number; seed?: string }
+): GlyphEntry[] {
+  const { top = 96, prefix = "~", levels = 2, seed } = opts || {};
+  const words = normalizeWords(text);
+  const phrases = minePhrases(words, top);
+  const pool = shuffle(asciiGlyphPool(prefix, levels), seed ?? ("tape:" + fnv1a32(text)));
+  return phrases.map((phrase, i) => ({ phrase, glyph: pool[i] }));
+}
+
 interface QueryOptions {
   mode: 'union' | 'intersection';
   window: number;
@@ -17,6 +98,10 @@ function usage(){console.log(`Usage:
   tape query "<text>" [options]
   tape export <outfile.json>
   tape glyph-train <folder-or-files...> [options]
+  tape encode --glyphs <file> < input.txt > encoded.txt
+  tape decode --glyphs <file> < encoded.txt > decoded.txt
+  tape pack --glyphs <file> < encoded.txt > tape.ftz
+  tape unpack < tape.ftz > encoded.txt
   tape bitmap [options]
 
 Query options:
@@ -32,6 +117,16 @@ Glyph training options:
   --min-freq <n>          Minimum phrase frequency to consider (default: 2)
   --max-glyphs <n>        Maximum number of glyphs to generate (default: 20)
   --output <file>         Output glyph dictionary to file (default: glyphs.json)
+  --ascii                 Use ASCII-only glyphs (default: false)
+  --prefix <char>         ASCII prefix character (default: ~)
+  --levels <n>            ASCII levels 1-3 (default: 2)
+  --seed <str>            Seed for deterministic glyph assignment
+  --top <n>               Maximum glyphs for aggressive training (default: 512)
+  --nmin <n>              Minimum n-gram size (default: 2)
+  --nmax <n>              Maximum n-gram size (default: 5)
+
+Encode/Decode options:
+  --glyphs <file>         Glyph dictionary file (required)
 
 Bitmap options:
   --build                 Build bitmap index from database
@@ -96,13 +191,20 @@ interface GlyphTrainOptions {
   minFreq: number;
   maxGlyphs: number;
   output?: string;
+  ascii: boolean;
+  prefix: string;
+  levels: number;
+  seed?: string;
 }
 
 function parseGlyphTrainArgs(args: string[]): { inputs: string[]; options: GlyphTrainOptions } {
   const options: GlyphTrainOptions = {
     minFreq: 2,
     maxGlyphs: 20,
-    output: 'glyphs.json'
+    output: 'glyphs.json',
+    ascii: false,
+    prefix: '~',
+    levels: 2
   };
   
   const inputs: string[] = [];
@@ -120,6 +222,18 @@ function parseGlyphTrainArgs(args: string[]): { inputs: string[]; options: Glyph
           break;
         case '--output':
           options.output = args[++i] || 'glyphs.json';
+          break;
+        case '--ascii':
+          options.ascii = true;
+          break;
+        case '--prefix':
+          options.prefix = args[++i] || '~';
+          break;
+        case '--levels':
+          options.levels = parseInt(args[++i] || '2', 10);
+          break;
+        case '--seed':
+          options.seed = args[++i];
           break;
         default:
           console.error(`Unknown option: ${arg}`);
@@ -452,11 +566,27 @@ async function run(){const[,,cmd,...args]=process.argv; if(!cmd) return usage();
       }
     }
     
-    // Analyze phrases
-    const phraseFreq = analyzePhrases(allDocs, options.minFreq);
+    // Generate glyphs based on mode
+    let glyphs: GlyphEntry[];
+    let phraseFreq: Map<string, number> | undefined;
     
-    // Generate glyphs
-    const glyphs = generateGlyphs(phraseFreq, options.maxGlyphs);
+    if (options.ascii) {
+      // Aggressive ASCII mode: use benefit-scored training
+      const combinedText = allDocs.join('\n');
+      const { train } = await import('@fractaltape/tape-core');
+      glyphs = train(combinedText, {
+        top: options.maxGlyphs || 512,
+        nMin: 2,
+        nMax: 5,
+        prefix: options.prefix,
+        levels: options.levels,
+        seed: options.seed
+      });
+    } else {
+      // Legacy Unicode mode
+      phraseFreq = analyzePhrases(allDocs, options.minFreq);
+      glyphs = generateGlyphs(phraseFreq, options.maxGlyphs);
+    }
     
     // Output results
     const output = {
@@ -465,7 +595,7 @@ async function run(){const[,,cmd,...args]=process.argv; if(!cmd) return usage();
       stats: {
         documents: allDocs.length,
         totalWords: allDocs.reduce((sum, doc) => sum + doc.split(/\s+/).length, 0),
-        uniquePhrases: phraseFreq.size,
+        uniquePhrases: options.ascii ? glyphs.length : (phraseFreq?.size || 0),
         generatedGlyphs: glyphs.length
       },
       glyphs
@@ -480,6 +610,92 @@ async function run(){const[,,cmd,...args]=process.argv; if(!cmd) return usage();
     return;
   }
   
+  if(cmd==='encode'){
+    const glyphFile = args.find(arg => arg.startsWith('--glyphs='))?.split('=')[1] || 
+                     args[args.indexOf('--glyphs') + 1];
+    if(!glyphFile) return usage();
+    
+    const glyphs = JSON.parse(fs.readFileSync(glyphFile, 'utf8'));
+    const text = fs.readFileSync(0, 'utf8'); // stdin
+    const { words, build, encode } = await import('@fractaltape/tape-core');
+    
+    const wordList = words(text);
+    const trie = build(glyphs.glyphs || glyphs);
+    const encoded = encode(wordList, trie);
+    
+    process.stdout.write(encoded.join(' '));
+    return;
+  }
+  
+  if(cmd==='decode'){
+    const glyphFile = args.find(arg => arg.startsWith('--glyphs='))?.split('=')[1] || 
+                     args[args.indexOf('--glyphs') + 1];
+    if(!glyphFile) return usage();
+    
+    const glyphs = JSON.parse(fs.readFileSync(glyphFile, 'utf8'));
+    const text = fs.readFileSync(0, 'utf8'); // stdin
+    const { decode } = await import('@fractaltape/tape-core');
+    
+    const tokens = text.split(/\s+/);
+    const decoded = decode(tokens, glyphs.glyphs || glyphs);
+    
+    process.stdout.write(decoded.join(' '));
+    return;
+  }
+  
+  if(cmd==='pack'){
+    const glyphFile = args.find(arg => arg.startsWith('--glyphs='))?.split('=')[1] || 
+                     args[args.indexOf('--glyphs') + 1];
+    if(!glyphFile) return usage();
+    
+    const glyphs = JSON.parse(fs.readFileSync(glyphFile, 'utf8'));
+    const text = fs.readFileSync(0, 'utf8'); // stdin
+    const { words, build, encode } = await import('@fractaltape/tape-core');
+    
+    const wordList = words(text);
+    const trie = build(glyphs.glyphs || glyphs);
+    const encoded = encode(wordList, trie);
+    
+    // Simple .ftz format: magic + glyph count + glyphs + encoded tokens
+    const magic = 'FTZ1';
+    const glyphCount = (glyphs.glyphs || glyphs).length;
+    const glyphData = JSON.stringify(glyphs.glyphs || glyphs);
+    const tokenData = encoded.join(' ');
+    
+    const header = Buffer.alloc(8);
+    header.write(magic, 0, 4);
+    header.writeUInt32LE(glyphCount, 4);
+    
+    process.stdout.write(header);
+    process.stdout.write(glyphData);
+    process.stdout.write('\n');
+    process.stdout.write(tokenData);
+    return;
+  }
+  
+  if(cmd==='unpack'){
+    const data = fs.readFileSync(0); // stdin
+    const magic = data.toString('utf8', 0, 4);
+    if(magic !== 'FTZ1') {
+      console.error('Invalid .ftz file');
+      process.exit(1);
+    }
+    
+    const glyphCount = data.readUInt32LE(4);
+    const glyphDataStart = 8;
+    const glyphDataEnd = data.indexOf('\n', glyphDataStart);
+    const glyphData = data.toString('utf8', glyphDataStart, glyphDataEnd);
+    const tokenData = data.toString('utf8', glyphDataEnd + 1);
+    
+    const glyphs = JSON.parse(glyphData);
+    const tokens = tokenData.split(/\s+/);
+    const { decode } = await import('@fractaltape/tape-core');
+    
+    const decoded = decode(tokens, glyphs);
+    process.stdout.write(decoded.join(' '));
+    return;
+  }
+
   if(cmd==='bitmap'){
     const {options} = parseBitmapArgs(args);
     
