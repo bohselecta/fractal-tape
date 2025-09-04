@@ -1,3 +1,7 @@
+<div align="center">
+  <img src="fractaltape.png" alt="Fractal Tape - Glyph Trainer" width="600"/>
+</div>
+
 # Fractal Tape - Glyph Trainer
 
 > **Interactive glyph compression with layered mining and fractal triangle visualization**
@@ -8,6 +12,32 @@
 Fractal Tape is an interactive glyph compression system that uses **layered mining** and **fractal addressing** to discover and compress text patterns. Documents are encoded into compact glyph representations and visualized within a Sierpinski triangle for spatial exploration.
 
 ## 🎯 **Core Concepts**
+
+### Auto-Encoding System
+The system automatically discovers and applies compression patterns:
+
+1. **Pattern Discovery**: Analyzes input text to find frequent n-grams (2-5 word phrases)
+2. **Glyph Assignment**: Assigns ASCII glyphs (e.g., `~A`, `~b`, `~AA`) to discovered patterns
+3. **Longest-Match Encoding**: Replaces text with glyphs using greedy longest-match strategy
+4. **Recursive Mining**: Higher layers mine patterns from previously encoded streams
+
+**Example Auto-Encoding Process**:
+```
+Input: "i'm going to write some code and then i'm going to test it"
+
+Layer 1 Mining:
+- "i'm going to" appears 2 times → assign "~A"
+- "write some code" appears 1 time → assign "~b" 
+- "and then" appears 1 time → assign "~c"
+
+Layer 1 Encoding: "~A write some code ~c ~A test it"
+
+Layer 2 Mining (from encoded stream):
+- "~A write some code" appears 1 time → assign "~AA"
+- "~c ~A test" appears 1 time → assign "~Ab"
+
+Layer 2 Encoding: "~AA ~c ~Ab it"
+```
 
 ### Layered Mining System
 The system discovers patterns through recursive analysis:
